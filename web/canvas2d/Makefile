@@ -42,6 +42,7 @@ public:
 	@cp app.js public/
 	@cp map-data.js public/
 	@cp config.js public/
+	@cp routes.js public/
 	@cp -r images public/
 	@echo "public directory created successfully"
 

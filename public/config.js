@@ -32,11 +32,11 @@ const SCALE_SETTINGS = {
     scaleZ: 81,  // Z軸（高さ）
 
     // ズーム（パーセント）
-    zoom: 60,
+    zoom: 55,
 
     // パンオフセット（px単位）
-    panX: 117,
-    panY: 51
+    panX: 109,
+    panY: 38
 };
 
 // windowオブジェクトに明示的に代入（グローバルアクセス用）

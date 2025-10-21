@@ -15,37 +15,64 @@
             <div id="loading-status"></div>
         </header>
 
-        <!-- ナビゲーション（フロア選択 + ビュー選択） -->
+        <!-- ナビゲーション（フロア・ルート選択 + ビュー選択） -->
         <div class="navigation">
-            <div class="floor-tabs">
-                <button class="floor-tab active" data-floor="all">全体</button>
-                <button class="floor-tab" data-floor="0">B1</button>
-                <button class="floor-tab" data-floor="1">1F</button>
-                <button class="floor-tab" data-floor="2">2F</button>
-                <button class="floor-tab" data-floor="3">3F</button>
-                <button class="floor-tab" data-floor="4">4F</button>
-                <button class="floor-tab" data-floor="5">5F</button>
-                <button class="floor-tab building-mode" data-floor="building">建物</button>
+            <!-- 1段目 -->
+            <div class="nav-row">
+                <div class="nav-group">
+                    <div class="floor-tabs">
+                        <button class="floor-tab active" data-floor="all">全体</button>
+                        <button class="floor-tab" data-floor="0">B1</button>
+                        <button class="floor-tab" data-floor="1">1F</button>
+                        <button class="floor-tab" data-floor="2">2F</button>
+                        <button class="floor-tab" data-floor="3">3F</button>
+                        <button class="floor-tab" data-floor="4">4F</button>
+                        <button class="floor-tab" data-floor="5">5F</button>
+                        <button class="floor-tab building-mode" data-floor="building">建物</button>
+                    </div>
+                    <div class="view-tabs">
+                        <button class="view-tab active" data-view="cabinet">Cabinet</button>
+                        <button class="view-tab" data-view="isometric">Iso</button>
+                    </div>
+                    <div class="connection-controls">
+                        <button class="connection-tab active" data-connection="arrow">線</button>
+                        <button class="connection-tab" data-connection="plane">平面</button>
+                    </div>
+                    <div class="texture-controls">
+                        <button class="texture-tab active" data-texture="texture">画像</button>
+                        <button class="texture-tab" data-texture="color">色</button>
+                    </div>
+                </div>
+                <div class="right-controls">
+                    <button id="edit-mode-toggle" class="edit-button">編集</button>
+                    <button id="scale-toggle-button" class="scale-toggle-btn">縮尺</button>
+                </div>
             </div>
-            <div class="view-tabs">
-                <button class="view-tab active" data-view="cabinet">Cabinet</button>
-                <button class="view-tab" data-view="isometric">Iso</button>
-            </div>
-            <div class="edit-controls">
-                <button id="edit-mode-toggle" class="edit-button">編集モード</button>
-            </div>
-            <div class="connection-controls">
-                <button class="connection-tab active" data-connection="arrow">線</button>
-                <button class="connection-tab" data-connection="plane">平面</button>
-            </div>
-            <div class="texture-controls">
-                <button class="texture-tab active" data-texture="texture">画像</button>
-                <button class="texture-tab" data-texture="color">色</button>
+
+            <!-- 2段目 -->
+            <div class="nav-row">
+                <div class="nav-group">
+                    <div class="floor-tabs">
+                        <button class="floor-tab route-mode" data-route="all_routes">攻略</button>
+                        <button class="floor-tab route-mode" data-route="gimmick_start">グローザ</button>
+                        <button class="floor-tab route-mode" data-route="daehyon">デヒョン</button>
+                        <button class="floor-tab route-mode" data-route="hyuriel">ヒュリエル</button>
+                        <button class="floor-tab route-mode" data-route="gioia">ジオイア</button>
+                        <button class="floor-tab route-mode" data-route="kades">カデス</button>
+                    </div>
+                    <div class="curve-controls">
+                        <span class="curve-label">矢印</span>
+                        <button class="curve-tab active" data-curve="catmullrom">CR(Tension)</button>
+                        <button class="curve-tab" data-curve="chordal">CR(Chordal)</button>
+                        <button class="curve-tab" data-curve="cubic">Cubic</button>
+                        <button class="curve-tab" data-curve="quadratic">Quadratic</button>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- 縮尺コントロール -->
-        <div class="scale-controls">
+        <div class="scale-controls" style="display: none;">
             <div class="scale-control-group">
                 <label for="scale-x">X軸（横）:</label>
                 <input type="range" id="scale-x" min="30" max="300" value="72" step="1">
@@ -74,17 +101,20 @@
         </div>
 
         <main>
-            <!-- Canvas表示エリア -->
-            <div id="canvas-container">
-                <canvas id="main-canvas" width="1200" height="800"></canvas>
-                <button id="export-coords-inline" class="edit-overlay-button" style="display:none;">座標コピー</button>
-            </div>
-
             <!-- マップリストパネル -->
             <aside id="map-list-panel">
-                <h2>マップ一覧</h2>
+                <div class="map-list-nav">
+                    <button id="map-prev-btn" class="map-nav-btn">◀ 戻る</button>
+                    <button id="map-next-btn" class="map-nav-btn">進む ▶</button>
+                </div>
                 <div id="map-list"></div>
             </aside>
+
+            <!-- Canvas表示エリア -->
+            <div id="canvas-container">
+                <canvas id="main-canvas" width="1000" height="700"></canvas>
+                <button id="export-coords-inline" class="edit-overlay-button" style="display:none;">座標コピー</button>
+            </div>
         </main>
 
         <!-- マップ情報（下部） -->
@@ -132,6 +162,8 @@
     <script src="map-data.js"></script>
     <!-- 表示設定（エリア座標 + スケール設定） -->
     <script src="config.js"></script>
+    <!-- ルート定義 -->
+    <script src="routes.js"></script>
     <!-- アプリケーション -->
     <script src="app.js"></script>
 </body>

@@ -3,11 +3,14 @@ let canvas;
 let ctx;
 let mapData = window.MAP_DATA || MAP_DATA;
 let currentMapId = 'gate1_1f';
+let currentMapListIndex = -1;  // マップリスト内の選択インデックス
 let currentFloor = 'all';
 let buildingMode = false;
+let currentRoute = 'none';  // 'none' or ルートID
 let viewMode = 'cabinet'; // 'cabinet', 'flat2d', 'isometric', 'top'
 let connectionMode = 'arrow'; // 'arrow', 'plane', 'line'
 let textureMode = 'texture'; // 'texture', 'color'
+let curveAlgorithm = 'catmullrom'; // 'catmullrom', 'quadratic', 'cubic'
 
 // 縮尺設定の初期値（HTMLの初期値と一致させる）
 const DEFAULT_SCALE_X = 72;
@@ -72,8 +75,8 @@ let buildingPositions = {};
 // 定数
 const BASE_GRID_SIZE = 72;  // 基準グリッドサイズ
 const CELL_MARGIN_RATIO = 0.1;  // セル描画時のマージン比率（10%の隙間）
-const CANVAS_WIDTH = 1200;
-const CANVAS_HEIGHT = 800;
+const CANVAS_WIDTH = 1000;
+const CANVAS_HEIGHT = 700;
 
 // 動的グリッドサイズ計算
 function getGridSizeX() {
@@ -195,6 +198,49 @@ function toCabinetProjection(x, y, floor) {
     };
 }
 
+// ルートフィルタ用ヘルパー関数
+
+// ルートに含まれるMAPのセットを取得
+function getRouteMaps() {
+    if (!window.ROUTES) {
+        return null;
+    }
+
+    // 全体表示の場合はフィルタなし
+    if (currentRoute === 'none') {
+        return null;
+    }
+
+    // 攻略タブの場合は全ルートをマージ
+    if (currentRoute === 'all_routes') {
+        const allMaps = new Set();
+        Object.values(window.ROUTES).forEach(route => {
+            route.path.forEach(mapId => allMaps.add(mapId));
+        });
+        return allMaps.size > 0 ? allMaps : null;
+    }
+
+    // 特定ルートの場合
+    if (!window.ROUTES[currentRoute]) {
+        return null;
+    }
+    return new Set(window.ROUTES[currentRoute].path);
+}
+
+// ルートに含まれる建物（area）のセットを取得
+function getRouteAreas() {
+    const routeMaps = getRouteMaps();
+    if (!routeMaps) return null;
+
+    const areas = new Set();
+    mapData.maps.forEach(map => {
+        if (routeMaps.has(map.id)) {
+            areas.add(map.area);
+        }
+    });
+    return areas;
+}
+
 // 画像プリロード
 function preloadImages() {
     mapData.maps.forEach(map => {
@@ -313,19 +359,48 @@ function setupEventListeners() {
         });
     });
 
-    // フロアタブ
+    // フロアタブ（ルートタブと統合）
     document.querySelectorAll('.floor-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
             document.querySelectorAll('.floor-tab').forEach(t => t.classList.remove('active'));
             e.target.classList.add('active');
 
-            const floor = e.target.dataset.floor;
-            if (floor === 'building') {
-                buildingMode = true;
+            // ルートモードの場合
+            if (e.target.dataset.route) {
+                currentRoute = e.target.dataset.route;
                 currentFloor = 'all';
-            } else {
                 buildingMode = false;
-                currentFloor = floor;
+
+                // ルート選択時は先頭マップを選択
+                currentMapListIndex = 0;
+
+                // 先頭マップのIDを取得
+                if (currentRoute === 'all_routes' && window.ROUTES) {
+                    // 攻略タブの場合は全ルートの先頭
+                    const firstRouteId = Object.keys(window.ROUTES)[0];
+                    if (window.ROUTES[firstRouteId] && window.ROUTES[firstRouteId].path.length > 0) {
+                        currentMapId = window.ROUTES[firstRouteId].path[0];
+                    }
+                } else if (window.ROUTES && window.ROUTES[currentRoute]) {
+                    // 個別ルートの先頭
+                    if (window.ROUTES[currentRoute].path.length > 0) {
+                        currentMapId = window.ROUTES[currentRoute].path[0];
+                    }
+                }
+            }
+            // フロアモードの場合
+            else {
+                currentRoute = 'none';
+                currentMapListIndex = -1;
+
+                const floor = e.target.dataset.floor;
+                if (floor === 'building') {
+                    buildingMode = true;
+                    currentFloor = 'all';
+                } else {
+                    buildingMode = false;
+                    currentFloor = floor;
+                }
             }
             render();
         });
@@ -353,6 +428,17 @@ function setupEventListeners() {
         });
     });
 
+    // 曲線アルゴリズムタブ
+    document.querySelectorAll('.curve-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.curve-tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+
+            curveAlgorithm = e.target.dataset.curve;
+            render();
+        });
+    });
+
     // 縮尺コントロール
     const scaleXRange = document.getElementById('scale-x');
     const scaleXNum = document.getElementById('scale-x-num');
@@ -363,6 +449,15 @@ function setupEventListeners() {
     const scaleZoomRange = document.getElementById('scale-zoom');
     const scaleZoomNum = document.getElementById('scale-zoom-num');
     const scaleReset = document.getElementById('scale-reset');
+    const scaleToggleButton = document.getElementById('scale-toggle-button');
+    const scaleControlsDiv = document.querySelector('.scale-controls');
+
+    // 縮尺コントロール開閉
+    scaleToggleButton.addEventListener('click', () => {
+        const isHidden = scaleControlsDiv.style.display === 'none';
+        scaleControlsDiv.style.display = isHidden ? 'flex' : 'none';
+        scaleToggleButton.classList.toggle('active', isHidden);
+    });
 
     function syncScale() {
         scaleX = parseInt(scaleXRange.value);
@@ -699,9 +794,13 @@ function drawMapBlock(map) {
     if (viewMode === 'cabinet' || viewMode === 'isometric') {
         // キャビネット投影：立方体として描画
         // 同じ座標の全MAPを取得して、実際に存在する階を特定
+        const routeMaps = getRouteMaps();
         const mapsAtSameLocation = mapData.maps.filter(m => {
             const mPos = AREA_POSITIONS[m.area];
             if (!mPos || mPos.x !== pos.x || mPos.y !== pos.y) return false;
+
+            // ルートフィルタを適用
+            if (routeMaps && !routeMaps.has(m.id)) return false;
 
             // フロアフィルタを適用
             if (currentFloor !== 'all' && m.floor !== parseInt(currentFloor)) return false;
@@ -971,33 +1070,54 @@ function drawMapBlock(map) {
             }
         });
 
-        // 第2パス：MAP名を後に描画（前景レイヤー）
-        mapsAtSameLocation.forEach(mapAtLoc => {
-            const mapFloorCorners = corners2D.map(c => toCabinetProjection(c.x, c.y, mapAtLoc.floor));
-            const centerX = (mapFloorCorners[0].x + mapFloorCorners[1].x + mapFloorCorners[2].x + mapFloorCorners[3].x) / 4;
-            const centerY = (mapFloorCorners[0].y + mapFloorCorners[1].y + mapFloorCorners[2].y + mapFloorCorners[3].y) / 4;
-
-            ctx.font = 'bold 16px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            // 白い縁取り（極細）
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.strokeText(mapAtLoc.name, centerX, centerY);
-            // 黒い文字（太字）
-            ctx.fillStyle = '#000000';
-            ctx.fillText(mapAtLoc.name, centerX, centerY);
-        });
     }
+}
+
+// MAP名ラベルを描画（矢印の後に描画するため分離）
+function drawMapLabel(map) {
+    const pos = AREA_POSITIONS[map.area];
+    if (!pos) return;
+
+    const margin = CELL_MARGIN_RATIO;
+    const corners2D = [
+        { x: pos.x + margin, y: pos.y + margin },
+        { x: pos.x + 1 - margin, y: pos.y + margin },
+        { x: pos.x + 1 - margin, y: pos.y + 1 - margin },
+        { x: pos.x + margin, y: pos.y + 1 - margin }
+    ];
+
+    const mapFloorCorners = corners2D.map(c => toCabinetProjection(c.x, c.y, map.floor));
+    const centerX = (mapFloorCorners[0].x + mapFloorCorners[1].x + mapFloorCorners[2].x + mapFloorCorners[3].x) / 4;
+    const centerY = (mapFloorCorners[0].y + mapFloorCorners[1].y + mapFloorCorners[2].y + mapFloorCorners[3].y) / 4;
+
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 白い縁取り（極細）
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeText(map.name, centerX, centerY);
+    // 黒い文字（太字）
+    ctx.fillStyle = '#000000';
+    ctx.fillText(map.name, centerX, centerY);
 }
 
 // WP接続線を描画
 function drawWarpConnections(sideFilter = 'all') {
+    const routeMaps = getRouteMaps();
+
     mapData.warps.forEach(warp => {
         const fromMap = mapData.maps.find(m => m.id === warp.from);
         const toMap = mapData.maps.find(m => m.id === warp.to);
 
         if (!fromMap || !toMap) return;
+
+        // ルートフィルタ：両方のMAPがルートに含まれる場合のみ描画
+        if (routeMaps) {
+            if (!routeMaps.has(fromMap.id) || !routeMaps.has(toMap.id)) {
+                return;
+            }
+        }
 
         const fromPos = AREA_POSITIONS[fromMap.area];
         const toPos = AREA_POSITIONS[toMap.area];
@@ -1273,6 +1393,487 @@ function drawBuildings() {
     });
 }
 
+// ルートに含まれる建物のワイヤーフレームを描画
+function drawRouteBuildings(routeAreas) {
+    const areaGroups = {};
+
+    mapData.maps.forEach(map => {
+        const pos = AREA_POSITIONS[map.area];
+        if (!pos || !routeAreas.has(map.area)) return;
+
+        if (!areaGroups[map.area]) {
+            areaGroups[map.area] = [];
+        }
+        areaGroups[map.area].push(map);
+    });
+
+    // 各建物のワイヤーフレームを描画
+    Object.keys(areaGroups).forEach(area => {
+        const maps = areaGroups[area];
+        const pos = AREA_POSITIONS[area];
+
+        // 建物の範囲を計算
+        let minFloor = Infinity, maxFloor = -Infinity;
+        maps.forEach(map => {
+            minFloor = Math.min(minFloor, map.floor);
+            maxFloor = Math.max(maxFloor, map.floor);
+        });
+
+        const minX = pos.x;
+        const maxX = pos.x + 1;
+        const minY = pos.y;
+        const maxY = pos.y + 1;
+
+        // ワイヤーフレーム（半透明の箱）を描画
+        drawBuildingWireframe(minX, maxX, minY, maxY, minFloor, maxFloor);
+    });
+}
+
+// ワイヤーフレーム描画（drawBuildingBoxを参考に、塗りつぶしなし版）
+function drawBuildingWireframe(minX, maxX, minY, maxY, minFloor, maxFloor) {
+    const margin = CELL_MARGIN_RATIO;
+    const corners2D = [
+        { x: minX + margin, y: minY + margin },  // 南西
+        { x: maxX - margin, y: minY + margin },  // 南東
+        { x: maxX - margin, y: maxY - margin },  // 北東
+        { x: minX + margin, y: maxY - margin }   // 北西
+    ];
+
+    // 垂直エッジ（4本の柱）
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+        const bottom = toCabinetProjection(corners2D[i].x, corners2D[i].y, minFloor);
+        const top = toCabinetProjection(corners2D[i].x, corners2D[i].y, maxFloor);
+        ctx.beginPath();
+        ctx.moveTo(bottom.x, bottom.y);
+        ctx.lineTo(top.x, top.y);
+        ctx.stroke();
+    }
+
+    // 床面と天井面のエッジ
+    [minFloor, maxFloor].forEach(floor => {
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const p0 = toCabinetProjection(corners2D[0].x, corners2D[0].y, floor);
+        ctx.moveTo(p0.x, p0.y);
+        for (let i = 1; i < 4; i++) {
+            const p = toCabinetProjection(corners2D[i].x, corners2D[i].y, floor);
+            ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    });
+}
+
+// ルートのナビゲーション矢印を描画
+function drawRouteNavigation() {
+    if (!window.ROUTES) return;
+
+    // 攻略タブの場合は全ルートを描画
+    if (currentRoute === 'all_routes') {
+        Object.keys(window.ROUTES).forEach(routeId => {
+            drawSingleRoute(routeId);
+        });
+    } else if (currentRoute !== 'none') {
+        // 指定されたルートのみ描画（全体の場合は何も描画しない）
+        drawSingleRoute(currentRoute);
+    }
+}
+
+// 単一ルートを描画
+function drawSingleRoute(routeId) {
+    if (!window.ROUTES[routeId]) return;
+
+    const route = window.ROUTES[routeId];
+    const path = route.path;
+    const color = route.color || '#4CAF50';
+
+    // 全ポイントを収集（セグメント分割なし）
+    const points = [];
+    for (let i = 0; i < path.length; i++) {
+        const map = mapData.maps.find(m => m.id === path[i]);
+        if (!map) continue;
+
+        const pos = AREA_POSITIONS[map.area];
+        if (!pos) continue;
+
+        const center = toCabinetProjection(
+            pos.x + 0.5,
+            pos.y + 0.5,
+            map.floor
+        );
+        points.push(center);
+    }
+
+    // 1本の曲線として描画
+    if (points.length >= 2) {
+        drawRoutePath(points, color);
+    }
+}
+
+// ルート描画のメイン関数（アルゴリズムを選択）
+function drawRoutePath(points, color) {
+    if (points.length < 2) return;
+
+    // 選択されたアルゴリズムで描画
+    switch (curveAlgorithm) {
+        case 'catmullrom':
+            drawRoutePathCatmullRom(points, color);
+            break;
+        case 'chordal':
+            drawRoutePathChordal(points, color);
+            break;
+        case 'quadratic':
+            drawRoutePathQuadratic(points, color);
+            break;
+        case 'cubic':
+            drawRoutePathCubic(points, color);
+            break;
+        default:
+            drawRoutePathCatmullRom(points, color);
+    }
+}
+
+// アルゴリズム1: Catmull-Romスプライン（test.htmlと同じ実装）
+function drawRoutePathCatmullRom(points, color) {
+    if (points.length < 2) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+
+    // Catmull-Romスプライン用のtension（0.5が標準）
+    const tension = 0.5;
+
+    // ダミーポイントを追加した配列を作成
+    const pts = [
+        points[0],  // 最初のダミー（P0と同じ）
+        ...points,
+        points[points.length - 1]  // 最後のダミー（P(N-1)と同じ）
+    ];
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    // Catmull-Romスプラインで曲線を描画
+    for (let i = 1; i < pts.length - 2; i++) {
+        const P0 = pts[i - 1];  // Pi-1
+        const P1 = pts[i];      // Pi (現在の区間の始点)
+        const P2 = pts[i + 1];  // Pi+1 (現在の区間の終点)
+        const P3 = pts[i + 2];  // Pi+2
+
+        // 制御点 C1 の計算 (P1 から P2 へ向かう最初の制御点)
+        const C1x = P1.x + (P2.x - P0.x) * tension / 3;
+        const C1y = P1.y + (P2.y - P0.y) * tension / 3;
+
+        // 制御点 C2 の計算 (P1 から P2 へ向かう2番目の制御点)
+        const C2x = P2.x - (P3.x - P1.x) * tension / 3;
+        const C2y = P2.y - (P3.y - P1.y) * tension / 3;
+
+        // 三次ベジェ曲線として描画
+        ctx.bezierCurveTo(C1x, C1y, C2x, C2y, P2.x, P2.y);
+    }
+
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    // 曲線の最後の接線方向を正確に計算
+    const lastIdx = points.length - 1;
+    const P1 = pts[pts.length - 3];  // 最後から2番目の実ポイント
+    const P2 = pts[pts.length - 2];  // 最後の実ポイント
+    const P3 = pts[pts.length - 1];  // ダミー（P2と同じ）
+
+    // 最後のベジェ曲線の第2制御点（C2）を計算
+    const C2x = P2.x - (P3.x - P1.x) * tension / 3;
+    const C2y = P2.y - (P3.y - P1.y) * tension / 3;
+
+    // C2からP2への方向が曲線の終点での接線方向
+    const lastAngle = Math.atan2(P2.y - C2y, P2.x - C2x);
+
+    // 矢印を描画（先端が終点に来るように）
+    const arrowSize = 60;
+    drawArrowHead(P2.x, P2.y, lastAngle, color, arrowSize);
+}
+
+// アルゴリズム2: Chordal Catmull-Rom（alpha=1）
+function drawRoutePathChordal(points, color) {
+    if (points.length < 2) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+
+    const alpha = 1.0; // chordal parameter
+
+    // 拡張配列を作成（端点処理）
+    const P = [];
+    P.push(points[0]);
+    for (let i = 0; i < points.length; i++) P.push(points[i]);
+    P.push(points[points.length - 1]);
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    const beziers = [];
+    for (let i = 1; i <= points.length - 1; i++) {
+        const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+
+        // パラメータt計算（alpha=1.0の場合はコード長ベース）
+        function tj(ti, pa, pb) {
+            const dx = pb.x - pa.x, dy = pb.y - pa.y;
+            return ti + Math.pow(Math.hypot(dx, dy), alpha);
+        }
+        const t0 = 0;
+        const t1 = tj(t0, p0, p1);
+        const t2 = tj(t1, p1, p2);
+        const t3 = tj(t2, p2, p3);
+
+        const eps = 1e-6;
+        const dt02 = Math.max(t2 - t0, eps);
+        const dt13 = Math.max(t3 - t1, eps);
+        const dt12 = Math.max(t2 - t1, eps);
+
+        const k1 = (t2 - t1) / (3 * dt02);
+        const k2 = (t2 - t1) / (3 * dt13);
+
+        const C1 = {
+            x: p1.x + (p2.x - p0.x) * k1,
+            y: p1.y + (p2.y - p0.y) * k1
+        };
+        const C2 = {
+            x: p2.x - (p3.x - p1.x) * k2,
+            y: p2.y - (p3.y - p1.y) * k2
+        };
+
+        beziers.push({ p1, p2, C1, C2 });
+        ctx.bezierCurveTo(C1.x, C1.y, C2.x, C2.y, p2.x, p2.y);
+    }
+
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    const last = beziers[beziers.length - 1];
+    const dx = 3 * (last.p2.x - last.C2.x);
+    const dy = 3 * (last.p2.y - last.C2.y);
+    const lastAngle = Math.atan2(dy, dx);
+
+    drawArrowHead(last.p2.x, last.p2.y, lastAngle, color, 60);
+}
+
+// アルゴリズム5: 二次ベジェ曲線
+function drawRoutePathQuadratic(points, color) {
+    if (points.length < 2) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = i < points.length - 2 ? points[i + 2] : null;
+
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+
+        if (!p3) {
+            ctx.lineTo(p2.x, p2.y);
+        } else {
+            const v1x = p2.x - p1.x;
+            const v1y = p2.y - p1.y;
+            const v2x = p3.x - p2.x;
+            const v2y = p3.y - p2.y;
+            const cross = v1x * v2y - v1y * v2x;
+
+            const perpX = -v1y;
+            const perpY = v1x;
+            const perpLen = Math.sqrt(perpX * perpX + perpY * perpY);
+
+            const offsetDist = 50;
+            const dir = cross > 0 ? -1 : 1;
+            const ctrlX = midX + (perpX / perpLen) * offsetDist * dir;
+            const ctrlY = midY + (perpY / perpLen) * offsetDist * dir;
+
+            ctx.quadraticCurveTo(ctrlX, ctrlY, p2.x, p2.y);
+        }
+    }
+
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    // 二次ベジェの最後の制御点から接線方向を計算
+    const p1 = points[points.length - 2];
+    const p2 = points[points.length - 1];
+
+    // 最後のセグメントの制御点を再計算
+    const v1x = p2.x - p1.x;
+    const v1y = p2.y - p1.y;
+    const midX = (p1.x + p2.x) / 2;
+    const midY = (p1.y + p2.y) / 2;
+
+    // 曲線の終点での接線方向を計算（制御点からp2への方向）
+    const lastAngle = Math.atan2(p2.y - midY, p2.x - midX);
+
+    const arrowSize = 60;
+    drawArrowHead(p2.x, p2.y, lastAngle, color, arrowSize);
+}
+
+// アルゴリズム3: 三次ベジェ曲線（接線ベース）
+function drawRoutePathCubic(points, color) {
+    if (points.length < 2) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    let lastCtrl2x, lastCtrl2y;
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = i > 0 ? points[i - 1] : null;
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = i < points.length - 2 ? points[i + 2] : null;
+
+        const segLen = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+        const ctrlDist = segLen * 0.4;
+
+        let out1x, out1y;
+        if (p0) {
+            out1x = p2.x - p0.x;
+            out1y = p2.y - p0.y;
+        } else {
+            out1x = p2.x - p1.x;
+            out1y = p2.y - p1.y;
+        }
+        const out1Len = Math.sqrt(out1x ** 2 + out1y ** 2);
+        out1x = (out1x / out1Len) * ctrlDist;
+        out1y = (out1y / out1Len) * ctrlDist;
+
+        let in2x, in2y;
+        if (p3) {
+            in2x = p3.x - p1.x;
+            in2y = p3.y - p1.y;
+        } else {
+            in2x = p2.x - p1.x;
+            in2y = p2.y - p1.y;
+        }
+        const in2Len = Math.sqrt(in2x ** 2 + in2y ** 2);
+        in2x = (in2x / in2Len) * ctrlDist;
+        in2y = (in2y / in2Len) * ctrlDist;
+
+        if (p3) {
+            const v1x = p2.x - p1.x;
+            const v1y = p2.y - p1.y;
+            const v2x = p3.x - p2.x;
+            const v2y = p3.y - p2.y;
+            const cross = v1x * v2y - v1y * v2x;
+
+            const bulge = 30;
+            const dir = cross > 0 ? -1 : 1;
+            const perpX = -out1y * dir;
+            const perpY = out1x * dir;
+            const perpLen = Math.sqrt(perpX ** 2 + perpY ** 2);
+
+            out1x += (perpX / perpLen) * bulge;
+            out1y += (perpY / perpLen) * bulge;
+            in2x += (perpX / perpLen) * bulge;
+            in2y += (perpY / perpLen) * bulge;
+        }
+
+        const ctrl1x = p1.x + out1x;
+        const ctrl1y = p1.y + out1y;
+        const ctrl2x = p2.x - in2x;
+        const ctrl2y = p2.y - in2y;
+
+        // 最後のセグメントの制御点を保存
+        if (i === points.length - 2) {
+            lastCtrl2x = ctrl2x;
+            lastCtrl2y = ctrl2y;
+        }
+
+        ctx.bezierCurveTo(ctrl1x, ctrl1y, ctrl2x, ctrl2y, p2.x, p2.y);
+    }
+
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    // 曲線の最後の接線方向（ctrl2から終点への方向）
+    const lastTo = points[points.length - 1];
+    const lastAngle = Math.atan2(lastTo.y - lastCtrl2y, lastTo.x - lastCtrl2x);
+
+    const arrowSize = 60;
+    drawArrowHead(lastTo.x, lastTo.y, lastAngle, color, arrowSize);
+}
+
+// 矢印の先端を描画
+function drawArrowHead(x, y, angle, color, size) {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(
+        x - size * Math.cos(angle - Math.PI / 6),
+        y - size * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+        x - size * 0.6 * Math.cos(angle),
+        y - size * 0.6 * Math.sin(angle)
+    );
+    ctx.lineTo(
+        x - size * Math.cos(angle + Math.PI / 6),
+        y - size * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+// 単独ポイントを描画
+function drawRoutePoint(point, color) {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+}
+
 // レンダリング
 function render() {
     // キャンバスクリア
@@ -1286,10 +1887,18 @@ function render() {
         // 通常モードと建物モード：背景グリッドを描画
         drawBackgroundGrid();
 
+        const routeMaps = getRouteMaps();
+        const routeAreas = getRouteAreas();
+
         if (buildingMode) {
             // 建物表示モード
             drawBuildings();
         } else {
+            // ルートフィルタ適用時：建物のワイヤーフレームを描画
+            if (routeAreas) {
+                drawRouteBuildings(routeAreas);
+            }
+
             // 通常モード：シンプルな2パス描画
             // 1. 先に接続線を全部描画
             if (connectionMode === 'plane') {
@@ -1319,10 +1928,16 @@ function render() {
 
             const drawnLocations = new Set();
             sortedMaps.forEach(map => {
+                // ルートフィルタを適用
+                if (routeMaps && !routeMaps.has(map.id)) {
+                    return;
+                }
+
                 const pos = AREA_POSITIONS[map.area];
                 if (pos) {
-                    // 階層フィルタ使用時は階層も含めてキーにする
-                    const locationKey = currentFloor === 'all'
+                    // ルート選択時も階層を含めてキーにする（各フロアを個別に表示）
+                    // 通常の全体表示のみ、同じ座標の最前面だけ表示
+                    const locationKey = (currentFloor === 'all' && !routeMaps)
                         ? `${pos.x},${pos.y}`
                         : `${pos.x},${pos.y},${map.floor}`;
 
@@ -1337,6 +1952,36 @@ function render() {
                 // 平面モード：東側の垂直接続を床の後に描画
                 drawWarpConnections('east');
             }
+
+            // ナビゲーション矢印を描画
+            if (routeMaps) {
+                drawRouteNavigation();
+            }
+
+            // MAP名ラベルを最後に描画（矢印の上に表示）
+            sortedMaps.forEach(map => {
+                // 階数フィルタを適用
+                if (currentFloor !== 'all' && map.floor !== parseInt(currentFloor)) {
+                    return;
+                }
+
+                // ルートフィルタを適用
+                if (routeMaps && !routeMaps.has(map.id)) {
+                    return;
+                }
+
+                const pos = AREA_POSITIONS[map.area];
+                if (pos) {
+                    // 描画済みチェック（drawMapBlockと同じロジック）
+                    const locationKey = (currentFloor === 'all' && !routeMaps)
+                        ? `${pos.x},${pos.y}`
+                        : `${pos.x},${pos.y},${map.floor}`;
+
+                    if (drawnLocations.has(locationKey)) {
+                        drawMapLabel(map);
+                    }
+                }
+            });
         }
     }
 
@@ -1356,28 +2001,96 @@ function render() {
 function updateMapList() {
     const mapListDiv = document.getElementById('map-list');
     let html = '';
+    const routeMaps = getRouteMaps();
 
-    mapData.maps.forEach(map => {
-        // フロアフィルタを適用
-        if (currentFloor !== 'all' && map.floor !== parseInt(currentFloor)) {
-            return;
-        }
+    // 攻略タブの場合は全ルートを順序通りに表示（連続重複のみ排除）
+    if (currentRoute === 'all_routes' && window.ROUTES) {
+        const allRoutePaths = [];
+        // 各ルートのパスを順番に追加
+        Object.keys(window.ROUTES).forEach(routeId => {
+            const route = window.ROUTES[routeId];
+            route.path.forEach(mapId => {
+                // 直前のマップと同じ場合のみスキップ（連続重複排除）
+                if (allRoutePaths.length === 0 || allRoutePaths[allRoutePaths.length - 1] !== mapId) {
+                    allRoutePaths.push(mapId);
+                }
+            });
+        });
 
-        const isCurrent = map.id === currentMapId;
-        const className = isCurrent ? 'map-list-item current' : 'map-list-item';
-        html += `<div class="${className}" data-map-id="${map.id}">${map.name}</div>`;
-    });
+        allRoutePaths.forEach((mapId, index) => {
+            const map = mapData.maps.find(m => m.id === mapId);
+            if (map) {
+                const isCurrent = index === currentMapListIndex;
+                const className = isCurrent ? 'map-list-item current' : 'map-list-item';
+                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
+            }
+        });
+    } else if (routeMaps && window.ROUTES && window.ROUTES[currentRoute]) {
+        // 個別ルート選択時は、ルートの順序に従ってマップを表示
+        const routePath = window.ROUTES[currentRoute].path;
+        routePath.forEach((mapId, index) => {
+            const map = mapData.maps.find(m => m.id === mapId);
+            if (map) {
+                const isCurrent = index === currentMapListIndex;
+                const className = isCurrent ? 'map-list-item current' : 'map-list-item';
+                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
+            }
+        });
+    } else {
+        // 通常モード（フロアフィルタ）
+        let index = 0;
+        mapData.maps.forEach(map => {
+            // フロアフィルタを適用
+            if (currentFloor !== 'all' && map.floor !== parseInt(currentFloor)) {
+                return;
+            }
+
+            const isCurrent = index === currentMapListIndex;
+            const className = isCurrent ? 'map-list-item current' : 'map-list-item';
+            html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
+            index++;
+        });
+    }
 
     mapListDiv.innerHTML = html;
 
     // マップリストのクリックイベント
     document.querySelectorAll('.map-list-item').forEach(item => {
         item.addEventListener('click', (e) => {
+            currentMapListIndex = parseInt(e.target.dataset.index);
             currentMapId = e.target.dataset.mapId;
             render();
             updateMapList();
         });
     });
+
+    // ナビゲーションボタンの状態を更新
+    updateMapNavButtons();
+}
+
+// マップナビゲーションボタンの状態を更新
+function updateMapNavButtons() {
+    const prevBtn = document.getElementById('map-prev-btn');
+    const nextBtn = document.getElementById('map-next-btn');
+
+    if (!prevBtn || !nextBtn) return;
+
+    // マップリストの総数を取得
+    const totalMaps = document.querySelectorAll('.map-list-item').length;
+
+    // 戻るボタンの状態
+    if (currentMapListIndex <= 0 || totalMaps === 0) {
+        prevBtn.disabled = true;
+    } else {
+        prevBtn.disabled = false;
+    }
+
+    // 進むボタンの状態
+    if (currentMapListIndex < 0 || currentMapListIndex >= totalMaps - 1) {
+        nextBtn.disabled = true;
+    } else {
+        nextBtn.disabled = false;
+    }
 }
 
 // マップ情報表示
@@ -1911,6 +2624,17 @@ function generateCoordinatesText() {
     return lines.join('\n');
 }
 
+// 曲線アルゴリズム選択関数（コンソールから使用）
+window.setCurveAlgorithm = function(algorithm) {
+    const validAlgorithms = ['catmullrom', 'quadratic', 'cubic'];
+    if (!validAlgorithms.includes(algorithm)) {
+        console.error('Invalid algorithm. Valid options:', validAlgorithms);
+        return;
+    }
+    curveAlgorithm = algorithm;
+    render();
+};
+
 // DOM読み込み完了時に初期化
 document.addEventListener('DOMContentLoaded', init);
 
@@ -1920,6 +2644,57 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('export-coords-inline').addEventListener('click', copyCoordinatesToClipboard);
     document.getElementById('copy-coords').addEventListener('click', copyToClipboard);
     document.getElementById('close-modal').addEventListener('click', closeModal);
+
+    // マップナビゲーションボタン
+    document.getElementById('map-prev-btn').addEventListener('click', () => {
+        if (currentMapListIndex > 0) {
+            currentMapListIndex--;
+            const mapItems = document.querySelectorAll('.map-list-item');
+            if (mapItems[currentMapListIndex]) {
+                currentMapId = mapItems[currentMapListIndex].dataset.mapId;
+                render();
+                updateMapList();
+                // 選択した要素を中央に表示するようスクロール（#map-list内のみ）
+                setTimeout(() => {
+                    const updatedItems = document.querySelectorAll('.map-list-item');
+                    const mapListContainer = document.getElementById('map-list');
+                    if (updatedItems[currentMapListIndex] && mapListContainer) {
+                        const item = updatedItems[currentMapListIndex];
+                        const itemTop = item.offsetTop;
+                        const itemHeight = item.offsetHeight;
+                        const containerHeight = mapListContainer.clientHeight;
+                        const scrollTop = itemTop - (containerHeight / 2) + (itemHeight / 2);
+                        mapListContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
+                    }
+                }, 0);
+            }
+        }
+    });
+
+    document.getElementById('map-next-btn').addEventListener('click', () => {
+        const mapItems = document.querySelectorAll('.map-list-item');
+        if (currentMapListIndex < mapItems.length - 1) {
+            currentMapListIndex++;
+            if (mapItems[currentMapListIndex]) {
+                currentMapId = mapItems[currentMapListIndex].dataset.mapId;
+                render();
+                updateMapList();
+                // 選択した要素を中央に表示するようスクロール（#map-list内のみ）
+                setTimeout(() => {
+                    const updatedItems = document.querySelectorAll('.map-list-item');
+                    const mapListContainer = document.getElementById('map-list');
+                    if (updatedItems[currentMapListIndex] && mapListContainer) {
+                        const item = updatedItems[currentMapListIndex];
+                        const itemTop = item.offsetTop;
+                        const itemHeight = item.offsetHeight;
+                        const containerHeight = mapListContainer.clientHeight;
+                        const scrollTop = itemTop - (containerHeight / 2) + (itemHeight / 2);
+                        mapListContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
+                    }
+                }, 0);
+            }
+        }
+    });
 
     // モーダル外クリックで閉じる
     const modal = document.getElementById('export-modal');
