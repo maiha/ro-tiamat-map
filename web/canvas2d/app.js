@@ -422,21 +422,25 @@ function setupEventListeners() {
     // Canvas クリック
     canvas.addEventListener('click', handleCanvasClick);
 
-    // マウスホイールでズーム
+    // マウスホイール + Ctrlでズーム
     canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
+        // Ctrlキーが押されている時のみズーム
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
 
-        const delta = e.deltaY > 0 ? -5 : 5;
-        let newZoom = zoomLevel + delta;
+            const delta = e.deltaY > 0 ? -5 : 5;
+            let newZoom = zoomLevel + delta;
 
-        // 範囲制限
-        newZoom = Math.max(50, Math.min(200, newZoom));
+            // 範囲制限
+            newZoom = Math.max(50, Math.min(200, newZoom));
 
-        zoomLevel = newZoom;
-        scaleZoomRange.value = zoomLevel;
-        scaleZoomNum.value = zoomLevel;
+            zoomLevel = newZoom;
+            scaleZoomRange.value = zoomLevel;
+            scaleZoomNum.value = zoomLevel;
 
-        render();
+            render();
+        }
+        // Ctrlなしの場合は通常のスクロール（preventDefaultしない）
     }, { passive: false });
 
     // マウスドラッグ用のイベントリスナーは、ファイル末尾の
