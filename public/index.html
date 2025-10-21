@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ティアマト攻城戦 西ルート - Canvas 2D版</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="app">
+        <header>
+            <h1>ティアマト攻城戦 西ルート</h1>
+            <div id="loading-status"></div>
+        </header>
+
+        <!-- ナビゲーション（フロア選択 + ビュー選択） -->
+        <div class="navigation">
+            <div class="floor-tabs">
+                <button class="floor-tab active" data-floor="all">全体</button>
+                <button class="floor-tab" data-floor="0">B1</button>
+                <button class="floor-tab" data-floor="1">1F</button>
+                <button class="floor-tab" data-floor="2">2F</button>
+                <button class="floor-tab" data-floor="3">3F</button>
+                <button class="floor-tab" data-floor="4">4F</button>
+                <button class="floor-tab" data-floor="5">5F</button>
+                <button class="floor-tab building-mode" data-floor="building">建物</button>
+            </div>
+            <div class="view-tabs">
+                <button class="view-tab active" data-view="cabinet">Cabinet</button>
+                <button class="view-tab" data-view="isometric">Iso</button>
+            </div>
+            <div class="edit-controls">
+                <button id="edit-mode-toggle" class="edit-button">編集モード</button>
+            </div>
+            <div class="connection-controls">
+                <button class="connection-tab active" data-connection="arrow">線</button>
+                <button class="connection-tab" data-connection="plane">平面</button>
+            </div>
+            <div class="texture-controls">
+                <button class="texture-tab active" data-texture="texture">画像</button>
+                <button class="texture-tab" data-texture="color">色</button>
+            </div>
+        </div>
+
+        <!-- 縮尺コントロール -->
+        <div class="scale-controls">
+            <div class="scale-control-group">
+                <label for="scale-x">X軸（横）:</label>
+                <input type="range" id="scale-x" min="30" max="300" value="72" step="1">
+                <input type="number" id="scale-x-num" min="30" max="300" value="72" step="1">
+                <span class="scale-unit">px</span>
+            </div>
+            <div class="scale-control-group">
+                <label for="scale-y">Y軸（奥行）:</label>
+                <input type="range" id="scale-y" min="30" max="300" value="72" step="1">
+                <input type="number" id="scale-y-num" min="30" max="300" value="72" step="1">
+                <span class="scale-unit">px</span>
+            </div>
+            <div class="scale-control-group">
+                <label for="scale-z">Z軸（高さ）:</label>
+                <input type="range" id="scale-z" min="30" max="150" value="72" step="1">
+                <input type="number" id="scale-z-num" min="30" max="150" value="72" step="1">
+                <span class="scale-unit">px</span>
+            </div>
+            <div class="scale-control-group">
+                <label for="scale-zoom">ズーム:</label>
+                <input type="range" id="scale-zoom" min="50" max="200" value="100" step="5">
+                <input type="number" id="scale-zoom-num" min="50" max="200" value="100" step="5">
+                <span class="scale-unit">%</span>
+            </div>
+            <button id="scale-reset" class="scale-reset-btn">リセット</button>
+        </div>
+
+        <main>
+            <!-- Canvas表示エリア -->
+            <div id="canvas-container">
+                <canvas id="main-canvas" width="1200" height="800"></canvas>
+                <button id="export-coords-inline" class="edit-overlay-button" style="display:none;">座標コピー</button>
+            </div>
+
+            <!-- マップリストパネル -->
+            <aside id="map-list-panel">
+                <h2>マップ一覧</h2>
+                <div id="map-list"></div>
+            </aside>
+        </main>
+
+        <!-- マップ情報（下部） -->
+        <div id="info-panel">
+            <h2>マップ情報</h2>
+            <div id="info-content">
+                <p>マップをクリックして詳細を表示</p>
+            </div>
+        </div>
+
+        <!-- フッター -->
+        <footer id="footer">
+            <p>「ラグナロクオンライン」に関連する全ての表現物の権利は以下に帰属します。</p>
+            <p>©Gravity Co., Ltd. & LeeMyoungJin(studio DTDS) All rights reserved.</p>
+            <p>©GungHo Online Entertainment, Inc. All Rights Reserved.</p>
+            <hr>
+            <p>MAP情報は以下のサイトを参考にしています。</p>
+            <ul>
+                <li><a href="https://seesaawiki.jp/ro_pve_tiamat/d/%A5%ED%A1%BC%A5%A6%A5%A7%A5%F3%C2%E2%28%C0%BE%29"
+                        target="_blank" rel="noopener">seesaawiki - ローウェン砦(西)</a></li>
+                <li><a href="https://ro.dewassyoi.com/tiamat/tiamat2019-route-west/" target="_blank" rel="noopener">RO
+                        Dewassyoi - ティアマト攻城戦 西ルート</a></li>
+                <li><a href="https://uisan0heal.fc2.net/blog-entry-63.html" target="_blank" rel="noopener">うぃさんの回復日記 -
+                        ティアマト攻城戦西ルートマップ</a></li>
+                <li><a href="https://ro-mastodon.puyo.jp/@nyuton" target="_blank" rel="noopener">@nyuton さんの画像</a></li>
+            </ul>
+        </footer>
+    </div>
+
+    <!-- 座標エクスポートモーダル -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>編集後の座標データ</h2>
+                <button id="close-modal" class="close-button">&times;</button>
+            </div>
+            <textarea id="export-textarea" readonly></textarea>
+            <div class="modal-footer">
+                <button id="copy-coords" class="edit-button">コピー</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- マップデータ -->
+    <script src="map-data.js"></script>
+    <!-- 表示設定（エリア座標 + スケール設定） -->
+    <script src="config.js"></script>
+    <!-- アプリケーション -->
+    <script src="app.js"></script>
+</body>
+
+</html>
