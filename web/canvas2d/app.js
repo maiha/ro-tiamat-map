@@ -792,15 +792,12 @@ function drawMapBlock(map) {
     const isAccessible = accessibleMaps.has(map.id);
 
     if (viewMode === 'cabinet' || viewMode === 'isometric') {
+        const routeMaps = getRouteMaps();
         // キャビネット投影：立方体として描画
         // 同じ座標の全MAPを取得して、実際に存在する階を特定
-        const routeMaps = getRouteMaps();
         const mapsAtSameLocation = mapData.maps.filter(m => {
             const mPos = AREA_POSITIONS[m.area];
             if (!mPos || mPos.x !== pos.x || mPos.y !== pos.y) return false;
-
-            // ルートフィルタを適用
-            if (routeMaps && !routeMaps.has(m.id)) return false;
 
             // フロアフィルタを適用
             if (currentFloor !== 'all' && m.floor !== parseInt(currentFloor)) return false;
@@ -845,7 +842,11 @@ function drawMapBlock(map) {
                 const mapAtFloor = mapsAtSameLocation.find(m => m.floor === floor);
                 const img = imageCache.get(mapAtFloor.id);
 
-                if (img && img.complete && img.naturalWidth > 0) {
+                // この階のマップが現在のルートに含まれているかチェック
+                const isFloorInRoute = !routeMaps || routeMaps.has(mapAtFloor.id);
+
+                // 現在のルートに含まれる場合のみテクスチャを描画
+                if (isFloorInRoute && img && img.complete && img.naturalWidth > 0) {
                     // 北側の面（奥側）：左奥(3)→右奥(2)の垂直面
                     const topLeft = toCabinetProjection(corners2D[3].x, corners2D[3].y, floor + 1);
                     const topRight = toCabinetProjection(corners2D[2].x, corners2D[2].y, floor + 1);
@@ -854,7 +855,7 @@ function drawMapBlock(map) {
 
                     // 矩形を描画
                     ctx.save();
-                    ctx.globalAlpha = 1.0; // 壁面も完全不透明（Z-order修正により、奥の線を完全に隠す）
+                    ctx.globalAlpha = 1.0;
 
                     // 画像の幅と高さ
                     const wallWidth = bottomRight.x - bottomLeft.x;
@@ -891,71 +892,76 @@ function drawMapBlock(map) {
                 const isFloorCurrent = mapAtFloor.id === currentMapId;
                 const isFloorAccessible = accessibleMaps.has(mapAtFloor.id);
 
-                // 床の描画（テクスチャモードに応じて切り替え）
-                ctx.beginPath();
-                ctx.moveTo(floorCorners[0].x, floorCorners[0].y);
-                ctx.lineTo(floorCorners[1].x, floorCorners[1].y);
-                ctx.lineTo(floorCorners[2].x, floorCorners[2].y);
-                ctx.lineTo(floorCorners[3].x, floorCorners[3].y);
-                ctx.closePath();
+                // この階のマップが現在のルートに含まれているかチェック
+                const isFloorInRoute = !routeMaps || routeMaps.has(mapAtFloor.id);
 
-                if (textureMode === 'texture') {
-                    // 画像テクスチャモード
-                    const img = imageCache.get(mapAtFloor.id);
+                // 床の描画（現在のルートに含まれる場合のみ）
+                if (isFloorInRoute) {
+                    ctx.beginPath();
+                    ctx.moveTo(floorCorners[0].x, floorCorners[0].y);
+                    ctx.lineTo(floorCorners[1].x, floorCorners[1].y);
+                    ctx.lineTo(floorCorners[2].x, floorCorners[2].y);
+                    ctx.lineTo(floorCorners[3].x, floorCorners[3].y);
+                    ctx.closePath();
 
-                    if (img && img.complete && img.naturalWidth > 0) {
-                        // まず通常の色塗り（下地）
-                        ctx.fillStyle = floorMapColor;
-                        ctx.fill();
+                    if (textureMode === 'texture') {
+                        // 画像テクスチャモード
+                        const img = imageCache.get(mapAtFloor.id);
 
-                        // 斜投影変形して画像を描画
-                        // floorCorners: [0]=南西, [1]=南東, [2]=北東, [3]=北西
-                        const x0 = floorCorners[0].x, y0 = floorCorners[0].y;  // 原点（南西）
-                        const x1 = floorCorners[1].x, y1 = floorCorners[1].y;  // X方向ベクトル終点（南東）
-                        const x3 = floorCorners[3].x, y3 = floorCorners[3].y;  // Y方向ベクトル終点（北西）
+                        if (img && img.complete && img.naturalWidth > 0) {
+                            // まず通常の色塗り（下地）
+                            ctx.fillStyle = floorMapColor;
+                            ctx.fill();
 
-                        // テクスチャ分割：画像の下半分を床面全体に使用
-                        const ratio = getTextureSplitRatio();
-                        const floorSourceY = img.height * ratio.wallRatio;  // 切り出し開始Y座標
-                        const floorSourceH = img.height * ratio.floorRatio; // 切り出し高さ
+                            // 斜投影変形して画像を描画
+                            // floorCorners: [0]=南西, [1]=南東, [2]=北東, [3]=北西
+                            const x0 = floorCorners[0].x, y0 = floorCorners[0].y;  // 原点（南西）
+                            const x1 = floorCorners[1].x, y1 = floorCorners[1].y;  // X方向ベクトル終点（南東）
+                            const x3 = floorCorners[3].x, y3 = floorCorners[3].y;  // Y方向ベクトル終点（北西）
 
-                        // 一時キャンバスに画像の下半分を切り出し（上下反転してvalley fold効果）
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = img.width;
-                        tempCanvas.height = floorSourceH;
-                        const tempCtx = tempCanvas.getContext('2d');
+                            // テクスチャ分割：画像の下半分を床面全体に使用
+                            const ratio = getTextureSplitRatio();
+                            const floorSourceY = img.height * ratio.wallRatio;  // 切り出し開始Y座標
+                            const floorSourceH = img.height * ratio.floorRatio; // 切り出し高さ
 
-                        // 上下反転して描画（valley foldで壁から連続するように）
-                        tempCtx.save();
-                        tempCtx.scale(1, -1);  // Y軸反転
-                        tempCtx.drawImage(img, 0, floorSourceY, img.width, floorSourceH,
-                            0, -floorSourceH, img.width, floorSourceH);
-                        tempCtx.restore();
+                            // 一時キャンバスに画像の下半分を切り出し（上下反転してvalley fold効果）
+                            const tempCanvas = document.createElement('canvas');
+                            tempCanvas.width = img.width;
+                            tempCanvas.height = floorSourceH;
+                            const tempCtx = tempCanvas.getContext('2d');
 
-                        // 変換行列を計算（アフィン変換）
-                        const dx1 = x1 - x0;  // X方向ベクトル（画像の幅方向）
-                        const dy1 = y1 - y0;
-                        const dx2 = x3 - x0;  // Y方向ベクトル（画像の高さ方向）
-                        const dy2 = y3 - y0;
+                            // 上下反転して描画（valley foldで壁から連続するように）
+                            tempCtx.save();
+                            tempCtx.scale(1, -1);  // Y軸反転
+                            tempCtx.drawImage(img, 0, floorSourceY, img.width, floorSourceH,
+                                0, -floorSourceH, img.width, floorSourceH);
+                            tempCtx.restore();
 
-                        // 画像描画用に変換行列を保存・適用
-                        ctx.save();
-                        ctx.globalAlpha = 1.0; // 完全不透明（Z-order修正により、奥の線を完全に隠す）
-                        ctx.setTransform(dx1 / tempCanvas.width, dy1 / tempCanvas.width, dx2 / tempCanvas.height, dy2 / tempCanvas.height, x0, y0);
-                        ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
-                        ctx.restore();
+                            // 変換行列を計算（アフィン変換）
+                            const dx1 = x1 - x0;  // X方向ベクトル（画像の幅方向）
+                            const dy1 = y1 - y0;
+                            const dx2 = x3 - x0;  // Y方向ベクトル（画像の高さ方向）
+                            const dy2 = y3 - y0;
+
+                            // 画像描画用に変換行列を保存・適用
+                            ctx.save();
+                            ctx.globalAlpha = 1.0;
+                            ctx.setTransform(dx1 / tempCanvas.width, dy1 / tempCanvas.width, dx2 / tempCanvas.height, dy2 / tempCanvas.height, x0, y0);
+                            ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+                            ctx.restore();
+                        } else {
+                            // 画像がない、または読み込み中は色塗りのみ
+                            ctx.fillStyle = floorMapColor;
+                            ctx.fill();
+                        }
                     } else {
-                        // 画像がない、または読み込み中は色塗りのみ
+                        // 色塗りモード
                         ctx.fillStyle = floorMapColor;
                         ctx.fill();
                     }
-                } else {
-                    // 色塗りモード
-                    ctx.fillStyle = floorMapColor;
-                    ctx.fill();
                 }
 
-                // 谷折り2面（壁+床）の完全な外周を描画
+                // 谷折り2面（壁+床）の完全な外周を描画（常に描画）
                 // 6角形：壁の上辺4点 + 床の手前辺2点
                 const wallTopLeft = toCabinetProjection(corners2D[3].x, corners2D[3].y, floor + 1);
                 const wallTopRight = toCabinetProjection(corners2D[2].x, corners2D[2].y, floor + 1);
@@ -964,17 +970,23 @@ function drawMapBlock(map) {
 
                 // 枠線の色と太さ：current > boss > accessible > default
                 const isBoss = mapAtFloor.boss;
+                ctx.save();
                 if (isFloorCurrent) {
                     ctx.strokeStyle = '#ff6666';
                     ctx.lineWidth = 4;
-                } else if (isBoss) {
+                } else if (isBoss && isFloorInRoute) {
+                    // ボスの黄色枠は現在のルートに含まれる場合のみ
                     ctx.strokeStyle = '#ffdd00';  // 黄色
                     ctx.lineWidth = 3;
                 } else if (isFloorAccessible) {
                     ctx.strokeStyle = '#6aaa6a';
                     ctx.lineWidth = 2;
-                } else {
+                } else if (isFloorInRoute) {
                     ctx.strokeStyle = '#666';
+                    ctx.lineWidth = 1;
+                } else {
+                    // ルートに含まれない場合は薄いグレーでワイヤーフレーム
+                    ctx.strokeStyle = '#444';
                     ctx.lineWidth = 1;
                 }
                 ctx.beginPath();
@@ -992,8 +1004,10 @@ function drawMapBlock(map) {
                 // 壁面の左辺（下→上） 戻る
                 ctx.closePath();
                 ctx.stroke();
+                ctx.restore();
             } else if (floor < maxFloor + 1) {
                 // MAPが存在しない中間階：枠線のみ（薄く、常にグレー）
+                ctx.save();
                 ctx.strokeStyle = '#444';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -1003,16 +1017,22 @@ function drawMapBlock(map) {
                 ctx.lineTo(floorCorners[3].x, floorCorners[3].y);
                 ctx.closePath();
                 ctx.stroke();
+                ctx.restore();
             }
         }
 
         // 第1パス：ボス画像/マークを先に描画（背景レイヤー）
         mapsAtSameLocation.forEach(mapAtLoc => {
             if (mapAtLoc.boss) {
-                const mapFloorCorners = corners2D.map(c => toCabinetProjection(c.x, c.y, mapAtLoc.floor));
-                const bossImg = imageCache.get(`${mapAtLoc.id}_boss`);
+                // このボスマップが現在のルートに含まれているかチェック
+                const isBossInRoute = !routeMaps || routeMaps.has(mapAtLoc.id);
 
-                if (bossImg && bossImg.complete && bossImg.naturalWidth > 0) {
+                // ルートに含まれる場合のみボス画像/マークを描画
+                if (isBossInRoute) {
+                    const mapFloorCorners = corners2D.map(c => toCabinetProjection(c.x, c.y, mapAtLoc.floor));
+                    const bossImg = imageCache.get(`${mapAtLoc.id}_boss`);
+
+                    if (bossImg && bossImg.complete && bossImg.naturalWidth > 0) {
                     // ボス画像がある場合：床面に立っているように描画
                     // 壁面の高さを基準にサイズを決定
                     const wallBottom = toCabinetProjection(corners2D[2].x, corners2D[2].y, mapAtLoc.floor);
@@ -1044,28 +1064,29 @@ function drawMapBlock(map) {
                     const imgX = bossScreen.x - imgWidth / 2;
                     const imgY = floorBottomY - imgHeight;  // 画像の下端を床面の下ラインに配置
 
-                    ctx.save();
-                    ctx.drawImage(bossImg, imgX, imgY, imgWidth, imgHeight);
-                    ctx.restore();
-                } else {
-                    // ボス画像がない場合：従来の王冠マーク
-                    const rightBottomX = mapFloorCorners[2].x;
-                    const rightBottomY = mapFloorCorners[2].y;
+                        ctx.save();
+                        ctx.drawImage(bossImg, imgX, imgY, imgWidth, imgHeight);
+                        ctx.restore();
+                    } else {
+                        // ボス画像がない場合：従来の王冠マーク
+                        const rightBottomX = mapFloorCorners[2].x;
+                        const rightBottomY = mapFloorCorners[2].y;
 
-                    ctx.save();
-                    // 背景円
-                    ctx.fillStyle = '#ff6666';
-                    ctx.beginPath();
-                    ctx.arc(rightBottomX - 10, rightBottomY - 10, 8, 0, Math.PI * 2);
-                    ctx.fill();
+                        ctx.save();
+                        // 背景円
+                        ctx.fillStyle = '#ff6666';
+                        ctx.beginPath();
+                        ctx.arc(rightBottomX - 10, rightBottomY - 10, 8, 0, Math.PI * 2);
+                        ctx.fill();
 
-                    // 王冠記号
-                    ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 12px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('👑', rightBottomX - 10, rightBottomY - 10);
-                    ctx.restore();
+                        // 王冠記号
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('👑', rightBottomX - 10, rightBottomY - 10);
+                        ctx.restore();
+                    }
                 }
             }
         });
@@ -1090,6 +1111,7 @@ function drawMapLabel(map) {
     const centerX = (mapFloorCorners[0].x + mapFloorCorners[1].x + mapFloorCorners[2].x + mapFloorCorners[3].x) / 4;
     const centerY = (mapFloorCorners[0].y + mapFloorCorners[1].y + mapFloorCorners[2].y + mapFloorCorners[3].y) / 4;
 
+    ctx.save();
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1100,6 +1122,7 @@ function drawMapLabel(map) {
     // 黒い文字（太字）
     ctx.fillStyle = '#000000';
     ctx.fillText(map.name, centerX, centerY);
+    ctx.restore();
 }
 
 // WP接続線を描画
@@ -1928,11 +1951,6 @@ function render() {
 
             const drawnLocations = new Set();
             sortedMaps.forEach(map => {
-                // ルートフィルタを適用
-                if (routeMaps && !routeMaps.has(map.id)) {
-                    return;
-                }
-
                 const pos = AREA_POSITIONS[map.area];
                 if (pos) {
                     // ルート選択時も階層を含めてキーにする（各フロアを個別に表示）
@@ -1962,11 +1980,6 @@ function render() {
             sortedMaps.forEach(map => {
                 // 階数フィルタを適用
                 if (currentFloor !== 'all' && map.floor !== parseInt(currentFloor)) {
-                    return;
-                }
-
-                // ルートフィルタを適用
-                if (routeMaps && !routeMaps.has(map.id)) {
                     return;
                 }
 
@@ -2027,6 +2040,19 @@ function updateMapList() {
         });
     } else if (routeMaps && window.ROUTES && window.ROUTES[currentRoute]) {
         // 個別ルート選択時は、ルートの順序に従ってマップを表示
+
+        // 前のルートへのリンクを先頭に追加
+        if (window.ROUTE_ORDER) {
+            const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+            if (currentIndex > 0) {
+                const prevRouteId = window.ROUTE_ORDER[currentIndex - 1];
+                const prevRoute = window.ROUTES[prevRouteId];
+                if (prevRoute) {
+                    html += `<div class="map-list-item prev-route" data-prev-route="${prevRouteId}">(${prevRoute.name}←)</div>`;
+                }
+            }
+        }
+
         const routePath = window.ROUTES[currentRoute].path;
         routePath.forEach((mapId, index) => {
             const map = mapData.maps.find(m => m.id === mapId);
@@ -2036,6 +2062,18 @@ function updateMapList() {
                 html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
             }
         });
+
+        // 次のルートへのリンクを最後に追加
+        if (window.ROUTE_ORDER) {
+            const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+            if (currentIndex >= 0 && currentIndex < window.ROUTE_ORDER.length - 1) {
+                const nextRouteId = window.ROUTE_ORDER[currentIndex + 1];
+                const nextRoute = window.ROUTES[nextRouteId];
+                if (nextRoute) {
+                    html += `<div class="map-list-item next-route" data-next-route="${nextRouteId}">(→${nextRoute.name})</div>`;
+                }
+            }
+        }
     } else {
         // 通常モード（フロアフィルタ）
         let index = 0;
@@ -2057,6 +2095,52 @@ function updateMapList() {
     // マップリストのクリックイベント
     document.querySelectorAll('.map-list-item').forEach(item => {
         item.addEventListener('click', (e) => {
+            // 次のルートへのリンクの場合
+            if (e.target.dataset.nextRoute) {
+                const nextRouteId = e.target.dataset.nextRoute;
+                // ルートタブをクリックしたのと同じ処理
+                currentRoute = nextRouteId;
+                currentMapListIndex = 0;
+                const routePath = window.ROUTES[nextRouteId].path;
+                if (routePath && routePath.length > 0) {
+                    currentMapId = routePath[0];
+                }
+                // タブのアクティブ状態を更新
+                document.querySelectorAll('.route-mode').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.route === nextRouteId) {
+                        btn.classList.add('active');
+                    }
+                });
+                render();
+                updateMapList();
+                return;
+            }
+
+            // 前のルートへのリンクの場合
+            if (e.target.dataset.prevRoute) {
+                const prevRouteId = e.target.dataset.prevRoute;
+                // ルートタブをクリックしたのと同じ処理
+                currentRoute = prevRouteId;
+                const routePath = window.ROUTES[prevRouteId].path;
+                if (routePath && routePath.length > 0) {
+                    // 前のルートの最後のマップに移動
+                    currentMapListIndex = routePath.length - 1;
+                    currentMapId = routePath[routePath.length - 1];
+                }
+                // タブのアクティブ状態を更新
+                document.querySelectorAll('.route-mode').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.route === prevRouteId) {
+                        btn.classList.add('active');
+                    }
+                });
+                render();
+                updateMapList();
+                return;
+            }
+
+            // 通常のマップアイテムの場合
             currentMapListIndex = parseInt(e.target.dataset.index);
             currentMapId = e.target.dataset.mapId;
             render();
@@ -2075,22 +2159,30 @@ function updateMapNavButtons() {
 
     if (!prevBtn || !nextBtn) return;
 
-    // マップリストの総数を取得
-    const totalMaps = document.querySelectorAll('.map-list-item').length;
+    // マップリストの総数を取得（ルートリンクを除く）
+    const totalMaps = document.querySelectorAll('.map-list-item:not(.prev-route):not(.next-route)').length;
 
     // 戻るボタンの状態
-    if (currentMapListIndex <= 0 || totalMaps === 0) {
-        prevBtn.disabled = true;
-    } else {
-        prevBtn.disabled = false;
+    let canGoPrev = currentMapListIndex > 0;
+    // 最初のマップでも、前のルートがあれば戻れる
+    if (currentMapListIndex === 0 && window.ROUTE_ORDER && currentRoute !== 'all_routes') {
+        const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+        if (currentIndex > 0) {
+            canGoPrev = true;
+        }
     }
+    prevBtn.disabled = !canGoPrev || totalMaps === 0;
 
     // 進むボタンの状態
-    if (currentMapListIndex < 0 || currentMapListIndex >= totalMaps - 1) {
-        nextBtn.disabled = true;
-    } else {
-        nextBtn.disabled = false;
+    let canGoNext = currentMapListIndex < totalMaps - 1;
+    // 最後のマップでも、次のルートがあれば進める
+    if (currentMapListIndex === totalMaps - 1 && window.ROUTE_ORDER && currentRoute !== 'all_routes') {
+        const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+        if (currentIndex >= 0 && currentIndex < window.ROUTE_ORDER.length - 1) {
+            canGoNext = true;
+        }
     }
+    nextBtn.disabled = !canGoNext || totalMaps === 0;
 }
 
 // マップ情報表示
@@ -2647,16 +2739,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // マップナビゲーションボタン
     document.getElementById('map-prev-btn').addEventListener('click', () => {
+        const mapItems = document.querySelectorAll('.map-list-item:not(.prev-route):not(.next-route)');
         if (currentMapListIndex > 0) {
             currentMapListIndex--;
-            const mapItems = document.querySelectorAll('.map-list-item');
             if (mapItems[currentMapListIndex]) {
                 currentMapId = mapItems[currentMapListIndex].dataset.mapId;
                 render();
                 updateMapList();
                 // 選択した要素を中央に表示するようスクロール（#map-list内のみ）
                 setTimeout(() => {
-                    const updatedItems = document.querySelectorAll('.map-list-item');
+                    const updatedItems = document.querySelectorAll('.map-list-item:not(.prev-route):not(.next-route)');
                     const mapListContainer = document.getElementById('map-list');
                     if (updatedItems[currentMapListIndex] && mapListContainer) {
                         const item = updatedItems[currentMapListIndex];
@@ -2668,11 +2760,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }, 0);
             }
+        } else if (currentMapListIndex === 0) {
+            // 最初のマップの場合、前のルートがあれば自動遷移
+            if (window.ROUTE_ORDER && currentRoute !== 'all_routes') {
+                const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+                if (currentIndex > 0) {
+                    const prevRouteId = window.ROUTE_ORDER[currentIndex - 1];
+                    // 前のルートに遷移
+                    currentRoute = prevRouteId;
+                    const routePath = window.ROUTES[prevRouteId].path;
+                    if (routePath && routePath.length > 0) {
+                        // 前のルートの最後のマップに移動
+                        currentMapListIndex = routePath.length - 1;
+                        currentMapId = routePath[routePath.length - 1];
+                    }
+                    // タブのアクティブ状態を更新
+                    document.querySelectorAll('.route-mode').forEach(btn => {
+                        btn.classList.remove('active');
+                        if (btn.dataset.route === prevRouteId) {
+                            btn.classList.add('active');
+                        }
+                    });
+                    render();
+                    updateMapList();
+                }
+            }
         }
     });
 
     document.getElementById('map-next-btn').addEventListener('click', () => {
-        const mapItems = document.querySelectorAll('.map-list-item');
+        const mapItems = document.querySelectorAll('.map-list-item:not(.prev-route):not(.next-route)');
         if (currentMapListIndex < mapItems.length - 1) {
             currentMapListIndex++;
             if (mapItems[currentMapListIndex]) {
@@ -2681,7 +2798,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateMapList();
                 // 選択した要素を中央に表示するようスクロール（#map-list内のみ）
                 setTimeout(() => {
-                    const updatedItems = document.querySelectorAll('.map-list-item');
+                    const updatedItems = document.querySelectorAll('.map-list-item:not(.prev-route):not(.next-route)');
                     const mapListContainer = document.getElementById('map-list');
                     if (updatedItems[currentMapListIndex] && mapListContainer) {
                         const item = updatedItems[currentMapListIndex];
@@ -2692,6 +2809,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         mapListContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
                     }
                 }, 0);
+            }
+        } else if (currentMapListIndex === mapItems.length - 1) {
+            // 最後のマップの場合、次のルートがあれば自動遷移
+            if (window.ROUTE_ORDER && currentRoute !== 'all_routes') {
+                const currentIndex = window.ROUTE_ORDER.indexOf(currentRoute);
+                if (currentIndex >= 0 && currentIndex < window.ROUTE_ORDER.length - 1) {
+                    const nextRouteId = window.ROUTE_ORDER[currentIndex + 1];
+                    // 次のルートに遷移
+                    currentRoute = nextRouteId;
+                    currentMapListIndex = 0;
+                    const routePath = window.ROUTES[nextRouteId].path;
+                    if (routePath && routePath.length > 0) {
+                        currentMapId = routePath[0];
+                    }
+                    // タブのアクティブ状態を更新
+                    document.querySelectorAll('.route-mode').forEach(btn => {
+                        btn.classList.remove('active');
+                        if (btn.dataset.route === nextRouteId) {
+                            btn.classList.add('active');
+                        }
+                    });
+                    render();
+                    updateMapList();
+                }
             }
         }
     });
