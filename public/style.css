@@ -259,6 +259,32 @@ main {
     font-weight: bold;
 }
 
+.map-list-item.prev-route {
+    color: #FFA500;
+    font-style: italic;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #444;
+}
+
+.map-list-item.prev-route:hover {
+    background-color: #3a2a1a;
+    color: #FFD700;
+}
+
+.map-list-item.next-route {
+    color: #00CED1;
+    font-style: italic;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #444;
+}
+
+.map-list-item.next-route:hover {
+    background-color: #1a3a3a;
+    color: #00FFFF;
+}
+
 /* 情報パネル（下部） */
 #info-panel {
     background-color: #222;

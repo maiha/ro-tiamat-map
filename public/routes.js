@@ -71,8 +71,43 @@ const ROUTES = {
       "wall_route07",
       "tower_north1_3f"
     ]
+  },
+  "remaining": {
+    name: "残り",
+    color: "#00CED1",
+    description: "残りルート",
+    path: [
+      "tower_north1_4f",
+      "tower_north1_observatory",
+      "tower_north1_4f",
+      "tower_north1_3f",
+      "tower_north1_2f",
+      "tower_north1_1f",
+      "tower_north1_2f",
+      "wall2f_04",
+      "tower_north1_2f",
+      "tower_north1_3f",
+      "wall_route07",
+      "tower_northwest_3f",
+      "wall_route05",
+      "tower_west_3f",
+      "wall_route03",
+      "tower_southwest_3f",
+      "wall_route01"
+    ]
   }
 };
 
+// ルートの順序定義
+const ROUTE_ORDER = [
+  "gimmick_start",  // グローザ
+  "daehyon",        // デヒョン
+  "hyuriel",        // ヒュリエル
+  "gioia",          // ジオイア
+  "kades",          // カデス
+  "remaining"       // 残り
+];
+
 // windowオブジェクトに明示的に代入（グローバルアクセス用）
 window.ROUTES = ROUTES;
+window.ROUTE_ORDER = ROUTE_ORDER;
