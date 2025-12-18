@@ -16,6 +16,7 @@ const ROUTE_DATA = {
       "tower_northwest_3f": "コイン",
       "tower_north1_3f": "カップ",
       "wall2f_03": "イフリート",
+      "tower_northwest_1f": "地下宝物庫の鍵",
     },
     routes: {
       "observatory_key": {
@@ -152,10 +153,10 @@ const ROUTE_DATA = {
           "gate1_3f"
         ]
       },
-      "ifrit": {
-        name: "イフリート",
-        color: "#FF0000",
-        description: "イフリート戦",
+      "deep_vault_key": {
+        name: "地下宝物庫の鍵",
+        color: "#edff7bff",
+        description: "地下宝物庫の鍵を入手",
         path: [
           "gate1_1f",
           "courtyard_west",
@@ -163,6 +164,14 @@ const ROUTE_DATA = {
           "tower_west_2f",
           "wall2f_03",
           "tower_northwest_2f",
+          "tower_northwest_1f"
+        ]
+      },
+      "ifrit": {
+        name: "イフリート",
+        color: "#FF0000",
+        description: "イフリート戦",
+        path: [
           "tower_northwest_1f",
           "tower_northwest_2f",
           "wall2f_03"
@@ -179,6 +188,7 @@ const ROUTE_DATA = {
       "coin",             // コイン
       "cup",              // カップ
       "quiz",             // クイズ
+      "deep_vault_key",   // 地下宝物庫の鍵
       "ifrit",            // イフリート
     ]
   },

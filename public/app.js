@@ -317,12 +317,6 @@ function init() {
     panOffsetX = SCALE_SETTINGS.panX;
     panOffsetY = SCALE_SETTINGS.panY;
 
-    // Web画面に成功メッセージ表示
-    const status = document.getElementById('loading-status');
-    if (status) {
-        status.textContent = `✓ 設定読込完了 (X:${scaleX}, Y:${scaleY}, Z:${scaleZ}, zoom:${zoomLevel}%)`;
-    }
-
     // UIコントロールの初期値を設定
     document.getElementById('scale-x').value = scaleX;
     document.getElementById('scale-x-num').value = scaleX;
@@ -427,11 +421,18 @@ function updateRouteHelp() {
         el.classList.remove('active');
     });
 
-    // 現在のルートタイプと選択ルートに一致するヘルプを表示
-    if (currentRoute && currentRoute !== 'none' && currentRoute !== 'all_routes') {
-        const helpEl = document.querySelector(`.${helpClass}[data-route="${currentRoute}"]`);
-        if (helpEl) {
-            helpEl.classList.add('active');
+    // ルートが選択されている場合、ルートタイプに対応するヘルプを表示
+    if (currentRoute && currentRoute !== 'none') {
+        // まず、特定ルート用のヘルプを探す
+        const routeSpecificHelp = document.querySelector(`.${helpClass}[data-route="${currentRoute}"]`);
+        if (routeSpecificHelp) {
+            routeSpecificHelp.classList.add('active');
+        } else {
+            // 特定ルート用がなければ、ルートタイプ共通のヘルプを表示
+            const typeHelp = document.querySelector(`.${helpClass}:not([data-route])`);
+            if (typeHelp) {
+                typeHelp.classList.add('active');
+            }
         }
     }
 }
@@ -3004,4 +3005,59 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.addEventListener('mousemove', handleEditMouseMove);
     canvas.addEventListener('mouseup', handleEditMouseUp);
     canvas.addEventListener('mouseleave', handleEditMouseUp);
+
+    // タロット入力機能
+    const tarotCols = ['sword', 'wand', 'coin', 'cup'];
+    let selectedTarotCol = null;
+
+    // 選択状態を設定する関数
+    function selectTarotCol(col) {
+        document.querySelectorAll('.tarot-input-table tr:first-child td').forEach(t => {
+            t.classList.remove('selected');
+        });
+        selectedTarotCol = col;
+        if (col) {
+            const td = document.querySelector(`.tarot-input-table tr:first-child td[data-col="${col}"]`);
+            if (td) {
+                td.classList.add('selected');
+            }
+        }
+    }
+
+    // デフォルトで先頭（ソード）を選択
+    selectTarotCol('sword');
+
+    // 入力列の選択（ラベルをクリック）
+    document.querySelectorAll('.tarot-input-table tr:first-child td').forEach(td => {
+        td.addEventListener('click', () => {
+            const col = td.dataset.col;
+            if (selectedTarotCol === col) {
+                selectTarotCol(null);
+            } else {
+                selectTarotCol(col);
+            }
+        });
+    });
+
+    // アルカナをクリック
+    document.querySelectorAll('.arcana-list ruby').forEach(ruby => {
+        ruby.addEventListener('click', () => {
+            if (selectedTarotCol) {
+                const num = ruby.dataset.num;
+                const valueCell = document.querySelector(`.tarot-value[data-col="${selectedTarotCol}"]`);
+                if (valueCell) {
+                    valueCell.textContent = num;
+                }
+
+                // 次の列に自動フォーカス
+                const currentIndex = tarotCols.indexOf(selectedTarotCol);
+                if (currentIndex < tarotCols.length - 1) {
+                    selectTarotCol(tarotCols[currentIndex + 1]);
+                } else {
+                    // 最後の列の場合は選択解除
+                    selectTarotCol(null);
+                }
+            }
+        });
+    });
 });

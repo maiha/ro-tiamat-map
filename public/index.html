@@ -12,7 +12,7 @@
     <div id="app">
         <header>
             <h1>
-                ティアマト攻城戦 西ルート
+                <span class="title">ティアマト攻城戦 西ルート</span>
                 <label class="route-type-radio">
                     <input type="radio" name="route-type" value="MD" checked>
                     <span>古城(MD)</span>
@@ -22,10 +22,26 @@
                     <span>YE</span>
                 </label>
                 <!-- ルート別ヘルプメッセージ -->
-                <div class="route-help route-md-help" data-route="observatory_key">
-                    <table class="tarot-table">
-                        <tr><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td></tr>
-                        <tr><td>愚者</td><td>魔術師</td><td>女教皇</td><td>女帝</td><td>皇帝</td><td>法王</td><td>恋人</td><td>戦車</td><td>正義</td><td>隠者</td></tr>
+                <div class="route-help route-md-help route-ye-help">
+                    <span class="arcana-list"><ruby data-num="0">愚者<rt>0</rt></ruby><ruby data-num="1">魔術師<rt>1</rt>
+                        </ruby><ruby data-num="2">女教皇<rt>2</rt></ruby><ruby data-num="3">女帝<rt>3</rt></ruby><ruby
+                            data-num="4">皇帝<rt>4</rt></ruby><ruby data-num="5">法王<rt>5</rt></ruby><ruby data-num="6">恋人
+                            <rt>6</rt>
+                        </ruby><ruby data-num="7">戦車<rt>7</rt></ruby><ruby data-num="8">正義<rt>8</rt>
+                        </ruby><ruby data-num="9">隠者<rt>9</rt></ruby></span>
+                    <table class="tarot-input-table">
+                        <tr>
+                            <td data-col="sword">ソード</td>
+                            <td data-col="wand">ワンド</td>
+                            <td data-col="coin">コイン</td>
+                            <td data-col="cup">カップ</td>
+                        </tr>
+                        <tr>
+                            <td class="tarot-value" data-col="sword">-</td>
+                            <td class="tarot-value" data-col="wand">-</td>
+                            <td class="tarot-value" data-col="coin">-</td>
+                            <td class="tarot-value" data-col="cup">-</td>
+                        </tr>
                     </table>
                 </div>
             </h1>
