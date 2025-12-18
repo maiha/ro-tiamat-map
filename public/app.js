@@ -346,8 +346,121 @@ function init() {
     updateMapList();
 }
 
+// ルートボタンを動的に生成
+function generateRouteButtons() {
+    const container = document.getElementById('route-tabs');
+    if (!container) return;
+
+    // 既存のボタンをクリア
+    container.innerHTML = '';
+
+    // 「攻略」ボタンを最初に追加
+    const allButton = document.createElement('button');
+    allButton.className = 'floor-tab route-mode';
+    allButton.dataset.route = 'all_routes';
+    allButton.textContent = '攻略';
+    container.appendChild(allButton);
+
+    // ROUTE_ORDERに基づいてボタンを生成
+    if (window.ROUTE_ORDER && window.ROUTES) {
+        window.ROUTE_ORDER.forEach(routeId => {
+            const route = window.ROUTES[routeId];
+            if (route) {
+                const button = document.createElement('button');
+                button.className = 'floor-tab route-mode';
+                button.dataset.route = routeId;
+                button.textContent = route.name;
+                container.appendChild(button);
+            }
+        });
+    }
+
+    // 生成したボタンにイベントリスナーを設定
+    setupRouteButtonListeners();
+}
+
+// ルートボタンのイベントリスナーを設定
+function setupRouteButtonListeners() {
+    document.querySelectorAll('#route-tabs .route-mode').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            // 全てのfloor-tabからactiveを削除
+            document.querySelectorAll('.floor-tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+
+            currentRoute = e.target.dataset.route;
+            currentFloor = 'all';
+            buildingMode = false;
+
+            // ルート選択時は先頭マップを選択
+            currentMapListIndex = 0;
+
+            // 先頭マップのIDを取得
+            if (currentRoute === 'all_routes' && window.ROUTES) {
+                // 攻略タブの場合は全ルートの先頭
+                const firstRouteId = Object.keys(window.ROUTES)[0];
+                if (window.ROUTES[firstRouteId] && window.ROUTES[firstRouteId].path.length > 0) {
+                    currentMapId = window.ROUTES[firstRouteId].path[0];
+                }
+            } else if (window.ROUTES && window.ROUTES[currentRoute]) {
+                // 個別ルートの先頭
+                if (window.ROUTES[currentRoute].path.length > 0) {
+                    currentMapId = window.ROUTES[currentRoute].path[0];
+                }
+            }
+
+            // ヘルプメッセージを更新
+            updateRouteHelp();
+
+            render();
+            updateMapList();
+        });
+    });
+}
+
+// ルート別ヘルプメッセージを更新
+function updateRouteHelp() {
+    const routeType = window.getCurrentRouteType ? window.getCurrentRouteType() : 'MD';
+    const helpClass = routeType === 'MD' ? 'route-md-help' : 'route-ye-help';
+
+    // 全てのヘルプを非表示
+    document.querySelectorAll('.route-help').forEach(el => {
+        el.classList.remove('active');
+    });
+
+    // 現在のルートタイプと選択ルートに一致するヘルプを表示
+    if (currentRoute && currentRoute !== 'none' && currentRoute !== 'all_routes') {
+        const helpEl = document.querySelector(`.${helpClass}[data-route="${currentRoute}"]`);
+        if (helpEl) {
+            helpEl.classList.add('active');
+        }
+    }
+}
+
 // イベントリスナーの設定
 function setupEventListeners() {
+    // ルートボタンを動的生成
+    generateRouteButtons();
+
+    // 初期状態：先頭ルートの先頭マップを表示
+    if (window.ROUTE_ORDER && window.ROUTE_ORDER.length > 0 && window.ROUTES) {
+        const firstRouteId = window.ROUTE_ORDER[0];
+        const firstRoute = window.ROUTES[firstRouteId];
+        if (firstRoute && firstRoute.path && firstRoute.path.length > 0) {
+            currentRoute = firstRouteId;
+            currentMapId = firstRoute.path[0];
+            currentMapListIndex = 0;
+
+            // 先頭ルートボタンをアクティブに
+            const firstRouteBtn = document.querySelector(`#route-tabs [data-route="${firstRouteId}"]`);
+            if (firstRouteBtn) {
+                firstRouteBtn.classList.add('active');
+            }
+
+            // ヘルプメッセージを表示
+            updateRouteHelp();
+        }
+    }
+
     // ビュータブ
     document.querySelectorAll('.view-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
@@ -359,50 +472,26 @@ function setupEventListeners() {
         });
     });
 
-    // フロアタブ（ルートタブと統合）
-    document.querySelectorAll('.floor-tab').forEach(tab => {
+    // フロアタブ（1段目のフロア選択のみ）
+    document.querySelectorAll('.floor-tab[data-floor]').forEach(tab => {
         tab.addEventListener('click', (e) => {
+            // 全てのfloor-tabからactiveを削除
             document.querySelectorAll('.floor-tab').forEach(t => t.classList.remove('active'));
             e.target.classList.add('active');
 
-            // ルートモードの場合
-            if (e.target.dataset.route) {
-                currentRoute = e.target.dataset.route;
+            currentRoute = 'none';
+            currentMapListIndex = -1;
+
+            const floor = e.target.dataset.floor;
+            if (floor === 'building') {
+                buildingMode = true;
                 currentFloor = 'all';
+            } else {
                 buildingMode = false;
-
-                // ルート選択時は先頭マップを選択
-                currentMapListIndex = 0;
-
-                // 先頭マップのIDを取得
-                if (currentRoute === 'all_routes' && window.ROUTES) {
-                    // 攻略タブの場合は全ルートの先頭
-                    const firstRouteId = Object.keys(window.ROUTES)[0];
-                    if (window.ROUTES[firstRouteId] && window.ROUTES[firstRouteId].path.length > 0) {
-                        currentMapId = window.ROUTES[firstRouteId].path[0];
-                    }
-                } else if (window.ROUTES && window.ROUTES[currentRoute]) {
-                    // 個別ルートの先頭
-                    if (window.ROUTES[currentRoute].path.length > 0) {
-                        currentMapId = window.ROUTES[currentRoute].path[0];
-                    }
-                }
-            }
-            // フロアモードの場合
-            else {
-                currentRoute = 'none';
-                currentMapListIndex = -1;
-
-                const floor = e.target.dataset.floor;
-                if (floor === 'building') {
-                    buildingMode = true;
-                    currentFloor = 'all';
-                } else {
-                    buildingMode = false;
-                    currentFloor = floor;
-                }
+                currentFloor = floor;
             }
             render();
+            updateMapList();
         });
     });
 
@@ -1033,36 +1122,36 @@ function drawMapBlock(map) {
                     const bossImg = imageCache.get(`${mapAtLoc.id}_boss`);
 
                     if (bossImg && bossImg.complete && bossImg.naturalWidth > 0) {
-                    // ボス画像がある場合：床面に立っているように描画
-                    // 壁面の高さを基準にサイズを決定
-                    const wallBottom = toCabinetProjection(corners2D[2].x, corners2D[2].y, mapAtLoc.floor);
-                    const wallTop = toCabinetProjection(corners2D[2].x, corners2D[2].y, mapAtLoc.floor + 1);
-                    const wallHeight = wallBottom.y - wallTop.y;
+                        // ボス画像がある場合：床面に立っているように描画
+                        // 壁面の高さを基準にサイズを決定
+                        const wallBottom = toCabinetProjection(corners2D[2].x, corners2D[2].y, mapAtLoc.floor);
+                        const wallTop = toCabinetProjection(corners2D[2].x, corners2D[2].y, mapAtLoc.floor + 1);
+                        const wallHeight = wallBottom.y - wallTop.y;
 
-                    // アスペクト比を保持して幅を計算（壁面の2倍のサイズ）
-                    const aspectRatio = bossImg.naturalWidth / bossImg.naturalHeight;
-                    const imgHeight = wallHeight * 2;
-                    const imgWidth = imgHeight * aspectRatio;
+                        // アスペクト比を保持して幅を計算（壁面の2倍のサイズ）
+                        const aspectRatio = bossImg.naturalWidth / bossImg.naturalHeight;
+                        const imgHeight = wallHeight * 2;
+                        const imgWidth = imgHeight * aspectRatio;
 
-                    // 赤丸の位置（右下コーナー）を起点に、z座標を15%手前にずらす
-                    // corners2D: [0]=南西, [1]=南東, [2]=北東, [3]=北西
-                    const baseX = corners2D[2].x;  // 右下コーナー（北東）のx座標
-                    const baseZ = corners2D[2].y;  // 右下コーナーのz座標（y）
+                        // 赤丸の位置（右下コーナー）を起点に、z座標を15%手前にずらす
+                        // corners2D: [0]=南西, [1]=南東, [2]=北東, [3]=北西
+                        const baseX = corners2D[2].x;  // 右下コーナー（北東）のx座標
+                        const baseZ = corners2D[2].y;  // 右下コーナーのz座標（y）
 
-                    // 床面の奥行きを計算（手前から奥まで）
-                    const frontZ = (corners2D[0].y + corners2D[1].y) / 2;  // 手前辺
-                    const backZ = (corners2D[2].y + corners2D[3].y) / 2;   // 奥辺
-                    const depthZ = backZ - frontZ;
+                        // 床面の奥行きを計算（手前から奥まで）
+                        const frontZ = (corners2D[0].y + corners2D[1].y) / 2;  // 手前辺
+                        const backZ = (corners2D[2].y + corners2D[3].y) / 2;   // 奥辺
+                        const depthZ = backZ - frontZ;
 
-                    // 赤丸位置
-                    const bossZ = baseZ;
-                    const bossScreen = toCabinetProjection(baseX, bossZ, mapAtLoc.floor);
+                        // 赤丸位置
+                        const bossZ = baseZ;
+                        const bossScreen = toCabinetProjection(baseX, bossZ, mapAtLoc.floor);
 
-                    // 画像の下端を床面（手前側）の下のラインに合わせる
-                    // corners: [0]=南西（左手前）, [1]=南東（右手前）, [2]=北東（右奥）, [3]=北西（左奥）
-                    const floorBottomY = (mapFloorCorners[0].y + mapFloorCorners[1].y) / 2;  // 手前側の床面ライン
-                    const imgX = bossScreen.x - imgWidth / 2;
-                    const imgY = floorBottomY - imgHeight;  // 画像の下端を床面の下ラインに配置
+                        // 画像の下端を床面（手前側）の下のラインに合わせる
+                        // corners: [0]=南西（左手前）, [1]=南東（右手前）, [2]=北東（右奥）, [3]=北西（左奥）
+                        const floorBottomY = (mapFloorCorners[0].y + mapFloorCorners[1].y) / 2;  // 手前側の床面ライン
+                        const imgX = bossScreen.x - imgWidth / 2;
+                        const imgY = floorBottomY - imgHeight;  // 画像の下端を床面の下ラインに配置
 
                         ctx.save();
                         ctx.drawImage(bossImg, imgX, imgY, imgWidth, imgHeight);
@@ -1111,17 +1200,39 @@ function drawMapLabel(map) {
     const centerX = (mapFloorCorners[0].x + mapFloorCorners[1].x + mapFloorCorners[2].x + mapFloorCorners[3].x) / 4;
     const centerY = (mapFloorCorners[0].y + mapFloorCorners[1].y + mapFloorCorners[2].y + mapFloorCorners[3].y) / 4;
 
+    // アイテム情報を取得
+    const itemName = window.ROUTE_ITEMS && window.ROUTE_ITEMS[map.id];
+    const displayText = itemName ? `${map.name}\n[${itemName}]` : map.name;
+
     ctx.save();
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    // 白い縁取り（極細）
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.strokeText(map.name, centerX, centerY);
-    // 黒い文字（太字）
-    ctx.fillStyle = '#000000';
-    ctx.fillText(map.name, centerX, centerY);
+
+    if (itemName) {
+        // アイテムがある場合は2行で表示
+        // マップ名
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeText(map.name, centerX, centerY - 10);
+        ctx.fillStyle = '#000000';
+        ctx.fillText(map.name, centerX, centerY - 10);
+
+        // アイテム名（金色で表示）
+        ctx.font = 'bold 12px sans-serif';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
+        ctx.strokeText(`[${itemName}]`, centerX, centerY + 8);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillText(`[${itemName}]`, centerX, centerY + 8);
+    } else {
+        // 通常表示
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeText(map.name, centerX, centerY);
+        ctx.fillStyle = '#000000';
+        ctx.fillText(map.name, centerX, centerY);
+    }
     ctx.restore();
 }
 
@@ -2035,7 +2146,12 @@ function updateMapList() {
             if (map) {
                 const isCurrent = index === currentMapListIndex;
                 const className = isCurrent ? 'map-list-item current' : 'map-list-item';
-                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
+                const itemName = window.ROUTE_ITEMS && window.ROUTE_ITEMS[mapId];
+                const itemHtml = itemName ? `<span class="map-item">${itemName}</span>` : '';
+                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}${itemHtml}</div>`;
+                if (itemName) {
+                    console.log(itemName);
+                }
             }
         });
     } else if (routeMaps && window.ROUTES && window.ROUTES[currentRoute]) {
@@ -2059,7 +2175,9 @@ function updateMapList() {
             if (map) {
                 const isCurrent = index === currentMapListIndex;
                 const className = isCurrent ? 'map-list-item current' : 'map-list-item';
-                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}</div>`;
+                const itemName = window.ROUTE_ITEMS && window.ROUTE_ITEMS[mapId];
+                const itemHtml = itemName ? `<span class="map-item">${itemName}</span>` : '';
+                html += `<div class="${className}" data-index="${index}" data-map-id="${map.id}">${map.name}${itemHtml}</div>`;
             }
         });
 
@@ -2717,7 +2835,7 @@ function generateCoordinatesText() {
 }
 
 // 曲線アルゴリズム選択関数（コンソールから使用）
-window.setCurveAlgorithm = function(algorithm) {
+window.setCurveAlgorithm = function (algorithm) {
     const validAlgorithms = ['catmullrom', 'quadratic', 'cubic'];
     if (!validAlgorithms.includes(algorithm)) {
         console.error('Invalid algorithm. Valid options:', validAlgorithms);
@@ -2843,6 +2961,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === modal) {
             closeModal();
         }
+    });
+
+    // ルートタイプ（MD/YE）切り替え
+    document.querySelectorAll('input[name="route-type"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const newType = e.target.value;
+            if (window.switchRouteData && window.switchRouteData(newType)) {
+                // ルートボタンを再生成
+                generateRouteButtons();
+
+                // orderの先頭ルートの先頭マップを表示
+                if (window.ROUTE_ORDER && window.ROUTE_ORDER.length > 0 && window.ROUTES) {
+                    const firstRouteId = window.ROUTE_ORDER[0];
+                    const firstRoute = window.ROUTES[firstRouteId];
+                    if (firstRoute && firstRoute.path && firstRoute.path.length > 0) {
+                        currentRoute = firstRouteId;
+                        currentMapId = firstRoute.path[0];
+                        currentMapListIndex = 0;
+
+                        // 先頭ルートボタンをアクティブに
+                        document.querySelectorAll('.floor-tab').forEach(t => t.classList.remove('active'));
+                        const firstRouteBtn = document.querySelector(`#route-tabs [data-route="${firstRouteId}"]`);
+                        if (firstRouteBtn) {
+                            firstRouteBtn.classList.add('active');
+                        }
+                    }
+                }
+
+                // ヘルプメッセージを更新
+                updateRouteHelp();
+                // マップリストを更新
+                updateMapList();
+                // 再描画
+                render();
+            }
+        });
     });
 
     canvas = document.getElementById('main-canvas');

@@ -11,7 +11,24 @@
 <body>
     <div id="app">
         <header>
-            <h1>ティアマト攻城戦 西ルート</h1>
+            <h1>
+                ティアマト攻城戦 西ルート
+                <label class="route-type-radio">
+                    <input type="radio" name="route-type" value="MD" checked>
+                    <span>古城(MD)</span>
+                </label>
+                <label class="route-type-radio">
+                    <input type="radio" name="route-type" value="YE">
+                    <span>YE</span>
+                </label>
+                <!-- ルート別ヘルプメッセージ -->
+                <div class="route-help route-md-help" data-route="observatory_key">
+                    <table class="tarot-table">
+                        <tr><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td></tr>
+                        <tr><td>愚者</td><td>魔術師</td><td>女教皇</td><td>女帝</td><td>皇帝</td><td>法王</td><td>恋人</td><td>戦車</td><td>正義</td><td>隠者</td></tr>
+                    </table>
+                </div>
+            </h1>
             <div id="loading-status"></div>
         </header>
 
@@ -42,6 +59,13 @@
                         <button class="texture-tab active" data-texture="texture">画像</button>
                         <button class="texture-tab" data-texture="color">色</button>
                     </div>
+                    <div class="curve-controls">
+                        <span class="curve-label">矢印</span>
+                        <button class="curve-tab active" data-curve="catmullrom">CR(Tension)</button>
+                        <button class="curve-tab" data-curve="chordal">CR(Chordal)</button>
+                        <button class="curve-tab" data-curve="cubic">Cubic</button>
+                        <button class="curve-tab" data-curve="quadratic">Quadratic</button>
+                    </div>
                 </div>
                 <div class="right-controls">
                     <button id="edit-mode-toggle" class="edit-button">編集</button>
@@ -52,21 +76,8 @@
             <!-- 2段目 -->
             <div class="nav-row">
                 <div class="nav-group">
-                    <div class="floor-tabs">
-                        <button class="floor-tab route-mode" data-route="all_routes">攻略</button>
-                        <button class="floor-tab route-mode" data-route="gimmick_start">グローザ</button>
-                        <button class="floor-tab route-mode" data-route="daehyon">デヒョン</button>
-                        <button class="floor-tab route-mode" data-route="hyuriel">ヒュリエル</button>
-                        <button class="floor-tab route-mode" data-route="gioia">ジオイア</button>
-                        <button class="floor-tab route-mode" data-route="kades">カデス</button>
-                        <button class="floor-tab route-mode" data-route="remaining">残り</button>
-                    </div>
-                    <div class="curve-controls">
-                        <span class="curve-label">矢印</span>
-                        <button class="curve-tab active" data-curve="catmullrom">CR(Tension)</button>
-                        <button class="curve-tab" data-curve="chordal">CR(Chordal)</button>
-                        <button class="curve-tab" data-curve="cubic">Cubic</button>
-                        <button class="curve-tab" data-curve="quadratic">Quadratic</button>
+                    <div id="route-tabs" class="floor-tabs">
+                        <!-- ルートボタンはapp.jsで動的に生成 -->
                     </div>
                 </div>
             </div>

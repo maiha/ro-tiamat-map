@@ -179,6 +179,15 @@ const MAP_DATA = {
       "image": "images/wall_route05.png"
     },
     {
+      "id": "tower_northwest_1f",
+      "name": "塔・北西1F",
+      "floor": 1,
+      "area": "tower_northwest",
+      "enemyType": "green",
+      "description": "",
+      "image": "images/tower_northwest_1f.png"
+    },
+    {
       "id": "tower_northwest_2f",
       "name": "塔・北西2F",
       "floor": 2,
