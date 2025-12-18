@@ -26,7 +26,38 @@ header {
 }
 
 header h1 {
+    display: flex;
     font-size: 1.4rem;
+    color: #ffd700;
+}
+
+.route-type-radio {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.route-type-radio input[type="radio"] {
+    display: none;
+}
+
+.route-type-radio span {
+    padding: 4px 12px;
+    background-color: #2a2a2a;
+    color: #888;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.route-type-radio:hover span {
+    background-color: #333;
+    color: #aaa;
+}
+
+.route-type-radio input[type="radio"]:checked+span {
+    background-color: #444;
     color: #ffd700;
 }
 
@@ -283,6 +314,18 @@ main {
 .map-list-item.next-route:hover {
     background-color: #1a3a3a;
     color: #00FFFF;
+}
+
+/* マップリスト内のアイテム表示 */
+.map-item {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    background-color: #4a3a1a;
+    color: #ffd700;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: normal;
 }
 
 /* 情報パネル（下部） */
